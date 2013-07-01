@@ -8,6 +8,7 @@ import sys
 __description__ = 'Send notifications to the desktop over dbus'
 
 _d_debug = False
+_d_msg_type = 'low'
 
 ll2str = {
     10: 'DEBUG',
@@ -26,26 +27,30 @@ class BaseClass:
         setattr(self, 'error', self.__logger.error)
         setattr(self, 'critical', self.__logger.critical)
 
-class DispatcherDbusClient(BaseClass):
+class NotificationDBusClient(BaseClass):
     _org = 'net.as65342.notifications'
     _path = '/net/as65342/notifications'
-    _methods = ['ifup', 'ifdown']
+    _methods = ['low', 'normal', 'critical']
 
     def __init__(self, logger):
         BaseClass.__init__(self, logger)
 
         self._bus = dbus.SystemBus()
-        self._ndp = self._bus.get_object(self._org, self._path)
+        self._np = self._bus.get_object(self._org, self._path)
         for method in self._methods:
-            setattr(self, method, self._ndp.get_dbus_method(method, self._org))
+            setattr(self, method, self._np.get_dbus_method(method, self._org))
 
 def main():
     parser = argparse.ArgumentParser(description=__description__)
     parser.add_argument('-D', dest='debug', action='store_true',
         default=_d_debug, help='Enable debugging')
 
-    parser.add_argument('action', choices=('ifup', 'ifdown'),
-        help='Action to perform')
+    parser.add_argument('-t', choices=('low', 'normal', 'critical'),
+        dest='msg_type', default=_d_msg_type, help='Action to perform')
+
+    parser.add_argument('title', nargs=1, type=str, help='Title')
+    parser.add_argument('message', nargs=1, type=str, help='Message')
+
 
     args = parser.parse_args()
 
@@ -64,12 +69,16 @@ def main():
 
     logger.debug('logging at %s' % ll2str[log_level])
 
-    ndserver = DispatcherDbusClient(logger)
+    dbus_client = NotificationDBusClient(logger)
 
-    if args.action == 'ifup':
-        ndserver.ifup('bla')
-    elif args.action == 'ifdown':
-        ndserver.ifdown('bla')
+    title = args.title[0]
+    message = args.message[0]
+    if args.msg_type == 'low':
+        dbus_client.low(title, message)
+    elif args.msg_type == 'normal':
+        dbus_client.normal(title, message)
+    elif args.msg_type == 'critical':
+        dbus_client.critical(title, message)
     else:
         logger.error('Unknown action: %s' % args.action)
 
