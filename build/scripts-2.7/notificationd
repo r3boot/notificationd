@@ -1,0 +1,105 @@
+#!/sbin/python2
+
+import argparse
+import logging
+import sys
+
+import gtk
+import dbus
+import dbus.service
+import pynotify
+
+from dbus.mainloop.glib import DBusGMainLoop
+
+__description__ = 'Trigger desktop notifications through the system dbus'
+
+_d_debug = False
+
+ll2str = {
+    10: 'DEBUG',
+    20: 'INFO',
+    30: 'WARNING',
+    40: 'ERROR',
+    50: 'CRITICAL'
+}
+class BaseClass:
+    def __init__(self, logger):
+        self._logger = logger
+        setattr(self, 'debug', self._logger.debug)
+        setattr(self, 'info', self._logger.info)
+        setattr(self, 'warning', self._logger.warning)
+        setattr(self, 'error', self._logger.error)
+        setattr(self, 'critical', self._logger.critical)
+
+class NotificationDBusServer(BaseClass, dbus.service.Object):
+    _busname = 'net.as65342.notifications'
+    _buspath = '/net/as65342/notifications'
+
+    def __init__(self, logger):
+        BaseClass.__init__(self, logger)
+
+        self._logger = logger
+        pynotify.init('notifications')
+
+        bus_name = dbus.service.BusName(self._busname, bus=dbus.SystemBus())
+        dbus.service.Object.__init__(self, bus_name, self._buspath)
+
+    def _message(self, urgency, title, msg):
+        if urgency not in ['low', 'normal', 'critical']:
+            self.error('Unknown urgency: %s' % urgency)
+            return
+
+        msg = pynotify.Notification(title, msg)
+        msg.set_urgency(urgency)
+        msg.show()
+
+    @dbus.service.method(_busname)
+    def low(self, title, msg=None):
+        self.debug('{0}.low received'.format(self._busname))
+        self.debug('{0}: {1}'.format(title, msg))
+        self._message('low', title, msg)
+        return True
+
+    @dbus.service.method(_busname)
+    def normal(self, title, msg=None):
+        self.debug('{0}.normal received'.format(self._busname))
+        self.debug('{0}: {1}'.format(title, msg))
+        self._message('normal', title, msg)
+        return True
+
+    @dbus.service.method(_busname)
+    def critical(self, title, msg=None):
+        self.debug('{0}.critical received'.format(self._busname))
+        self.debug('{0}: {1}'.format(title, msg))
+        self._message('critical', title, msg)
+        return True
+def main():
+    parser = argparse.ArgumentParser(description=__description__)
+    parser.add_argument('-D', dest='debug', action='store_true',
+        default=_d_debug, help='Enable debugging')
+
+    args = parser.parse_args()
+
+    logger = logging.getLogger('main')
+    if args.debug:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.INFO
+    logger.setLevel(log_level)
+
+    console_logger = logging.StreamHandler()
+    console_logger.setLevel(log_level)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s]: %(message)s')
+    console_logger.setFormatter(formatter)
+    logger.addHandler(console_logger)
+
+    logger.debug('logging at %s' % ll2str[log_level])
+
+    DBusGMainLoop(set_as_default=True)
+    dbus_server = NotificationDBusServer(logger)
+    gtk.main()
+
+    return
+
+if __name__ == '__main__':
+    sys.exit(main())
