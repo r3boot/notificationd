@@ -1,0 +1,79 @@
+#!/usr/bin/env python2
+
+import argparse
+import dbus
+import logging
+import sys
+
+__description__ = 'Send notifications to the desktop over dbus'
+
+_d_debug = False
+
+ll2str = {
+    10: 'DEBUG',
+    20: 'INFO',
+    30: 'WARNING',
+    40: 'ERROR',
+    50: 'CRITICAL'
+}
+
+class BaseClass:
+    def __init__(self, logger):
+        self.__logger = logger
+        setattr(self, 'debug', self.__logger.debug)
+        setattr(self, 'info', self.__logger.info)
+        setattr(self, 'warning', self.__logger.warning)
+        setattr(self, 'error', self.__logger.error)
+        setattr(self, 'critical', self.__logger.critical)
+
+class DispatcherDbusClient(BaseClass):
+    _org = 'net.as65342.notifications'
+    _path = '/net/as65342/notifications'
+    _methods = ['ifup', 'ifdown']
+
+    def __init__(self, logger):
+        BaseClass.__init__(self, logger)
+
+        self._bus = dbus.SystemBus()
+        self._ndp = self._bus.get_object(self._org, self._path)
+        for method in self._methods:
+            setattr(self, method, self._ndp.get_dbus_method(method, self._org))
+
+def main():
+    parser = argparse.ArgumentParser(description=__description__)
+    parser.add_argument('-D', dest='debug', action='store_true',
+        default=_d_debug, help='Enable debugging')
+
+    parser.add_argument('action', choices=('ifup', 'ifdown'),
+        help='Action to perform')
+
+    args = parser.parse_args()
+
+    logger = logging.getLogger('main')
+    if args.debug:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.INFO
+    logger.setLevel(log_level)
+
+    console_logger = logging.StreamHandler()
+    console_logger.setLevel(log_level)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s]: %(message)s')
+    console_logger.setFormatter(formatter)
+    logger.addHandler(console_logger)
+
+    logger.debug('logging at %s' % ll2str[log_level])
+
+    ndserver = DispatcherDbusClient(logger)
+
+    if args.action == 'ifup':
+        ndserver.ifup('bla')
+    elif args.action == 'ifdown':
+        ndserver.ifdown('bla')
+    else:
+        logger.error('Unknown action: %s' % args.action)
+
+    return
+
+if __name__ == '__main__':
+    sys.exit(main())
